@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Manual Data Entry</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-7xl mx-auto bg-white shadow-md rounded p-6">
+    <h1 class="text-2xl font-bold mb-4">📝 Manual Data Entry</h1>
+
+    <form id="manualForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- One input per field -->
+      {% for field in fields %}
+          {% set required = field in ["Equipment_No", "Unit_No", "Maintenance / New Box / Statement / Diagrams"] %}
+          <div>
+            <label class="block text-sm font-semibold mb-1">
+              {{ field }}{% if required %} <span class="text-red-500">*</span>{% endif %}
+            </label>
+            <input
+              name="{{ field }}"
+              class="w-full border px-3 py-2 rounded {% if required %}border-red-400{% endif %}"
+              type="text"
+              {% if required %} required {% endif %}
+            />
+          </div>
+        {% endfor %}
+    </form>
+
+    <div class="mt-4">
+      <button onclick="submitManualEntry()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">
+        ✅ Submit Entry
+      </button>
+      <a href="/" class="ml-4 text-blue-600 hover:underline">⬅️ Back to Dashboard</a>
+    </div>
+
+    <div id="submitStatus" class="mt-4 text-sm"></div>
+  </div>
+
+  <script>
+    function submitManualEntry() {
+      const form = document.getElementById('manualForm');
+      const formData = new FormData(form);
+      const jsonData = {};
+
+      for (let [key, value] of formData.entries()) {
+        jsonData[key] = value;
+      }
+
+      fetch('/manual-entry/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(jsonData)
+      })
+      .then(res => res.json())
+      .then(data => {
+        const status = document.getElementById('submitStatus');
+        if (data.status === 'success') {
+          status.textContent = '✅ ' + data.message;
+          status.className = 'text-green-600';
+        } else {
+          status.textContent = '❌ ' + data.message;
+          status.className = 'text-red-500';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+

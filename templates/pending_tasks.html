@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tasks Due in 10 Days</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-7xl mx-auto bg-white shadow-md rounded p-6">
+    <h1 class="text-2xl font-bold mb-4">🕒 Tasks Due in Next 10 Days</h1>
+
+    <table class="table-auto w-full text-sm text-left border">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-2 py-1 border">Region</th>
+          <th class="px-2 py-1 border">Equipment Number</th>
+          <th class="px-2 py-1 border">Unit No</th>
+          <th class="px-2 py-1 border">Address</th>
+          <th class="px-2 py-1 border">Post Code</th>
+          <th class="px-2 py-1 border">Plan Finish Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr class="border-t">
+          <td class="px-2 py-1 border">{{ task["Region"] }}</td>
+          <td class="px-2 py-1 border">{{ task["Equipment Number"] }}</td>
+          <td class="px-2 py-1 border">{{ task["Unit No"] }}</td>
+          <td class="px-2 py-1 border">{{ task["Address"] }}</td>
+          <td class="px-2 py-1 border">{{ task["Post Code"] }}</td>
+          <td class="px-2 py-1 border">{{ task["Plan Finish Date"] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <a href="/" class="mt-4 inline-block text-blue-600 hover:underline">⬅️ Back to Dashboard</a>
+  </div>
+</body>
+</html>
+

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Format Guide</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-5xl mx-auto bg-white shadow-md rounded p-6">
+    <h1 class="text-2xl font-bold mb-4">📄 CSV Format Guide</h1>
+    <p class="mb-4 text-sm text-gray-700">
+      Please make sure your CSV file includes the columns listed below **exactly as shown**. You can copy and paste this list as the **first row in Excel** or your preferred spreadsheet editor.
+    </p>
+
+    <textarea readonly class="w-full h-64 border rounded p-4 font-mono text-sm bg-gray-50">
+{{ fields | join(',') }}
+    </textarea>
+
+    <a href="/" class="mt-4 inline-block text-blue-600 hover:underline">⬅️ Back to Dashboard</a>
+  </div>
+</body>
+</html>
+
