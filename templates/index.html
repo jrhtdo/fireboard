@@ -2,489 +2,415 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Fire Compliance Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-100 text-gray-800 overflow-auto">
 
+  <!-- TailwindCSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"/>
+
+  <!-- Spinner & Active Button Styles -->
+  <style>
+    .filter-btn.active {
+      background-color: #2563eb; /* bg-blue-600 */
+      color: #ffffff;            /* text-white */
+      border: 2px solid #1e40af; /* darker border for active */
+    }
+    .filter-btn {
+      border: 2px solid transparent;
+    }
+    .filter-btn:focus {
+      outline: none;
+      border-color: #1e40af;
+    }
+    #loadingSpinner {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+    }
+  </style>
+
+  <!-- List definitions JSON -->
+  <script type="application/json" id="listDefinitions">
+  {
+    "All": [
+      "Region",
+      "Address",
+      "Unit No",
+      "Perceived sites",
+      "Scheduled Date",
+      "Plan Finish Date",
+      "Scheduled Time",
+      "Sequence",
+      "Equipment_No",
+      "Audit WorkOrder",
+      "Repair WorkOrder",
+      "Work Description",
+      "Status",
+      "Assigned Person",
+      "Safety Alert",
+      "Post Code",
+      "Note",
+      "Month",
+      "Assignee"
+    ],
+    "List 1": ["Region"],
+    "List 2": ["Perceived sites", "Equipment_No", "Audit WorkOrder", "Repair WorkOrder"],
+    "List 3": ["Unit No", "Address", "Post Code", "Sequence", "Scheduled Time"],
+    "List 4": ["Status"],
+    "List 5": ["Safety Alert"],
+    "List 6": ["Scheduled Date", "Plan Finish Date", "Month"]
+  }
+  </script>
+
+  <!-- Tabulator CSS -->
+  <link href="https://unpkg.com/tabulator-tables@5.4.4/dist/css/tabulator.min.css" rel="stylesheet"/>
+
+  <!-- jsPDF + AutoTable for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+
+  <!-- Loading Spinner -->
+  <div id="loadingSpinner" class="flex items-center justify-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+  </div>
 
   <!-- Header -->
-  
   <header class="bg-white shadow p-4 text-xl font-semibold flex justify-between items-center">
     <div>🔥 Fire Compliance Ltd. - Audit Dashboard [2025]</div>
-
-    <!-- Notification Button -->
-    <a href="/pending_tasks" class="relative bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition text-sm">
+    <a href="/pending_tasks"
+       class="relative bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition text-sm">
       🕒 Tasks Due Soon
-      <span id="dueCount" class="absolute -top-2 -right-2 bg-white text-red-600 font-bold rounded-full w-6 h-6 flex items-center justify-center text-xs shadow">
+      <span id="dueCount"
+            class="absolute -top-2 -right-2 bg-white text-red-600 font-bold rounded-full w-6 h-6 flex items-center justify-center text-xs shadow">
         0
       </span>
     </a>
   </header>
 
-
   <!-- Upload Section -->
   <section class="p-4 flex flex-col gap-4 items-center bg-white shadow mt-4 mx-4 rounded">
     <h2 class="text-lg font-semibold">📤 Upload CSV/Excel File</h2>
-
-    <!-- File upload + Manual Entry in a row -->
     <div class="flex gap-4 items-center">
       <a href="/csv-template" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">
         📄 View CSV Format
       </a>
-      <input id="fileInput" type="file" accept=".csv,.xlsx" class="border p-2 rounded w-72" />
+      <input id="fileInput" type="file" accept=".csv,.xlsx" class="border p-2 rounded w-72"/>
       <a href="/manual-entry" class="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 transition">
         📋 Manual Entry
       </a>
     </div>
-
-    <!-- Upload button -->
-    <button onclick="uploadFile()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">
+    <button type="button" onclick="uploadFile()"
+            class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">
       🚀 Upload File
     </button>
-
     <div id="uploadStatus" class="text-sm mt-2"></div>
   </section>
 
-  <!-- Chart Controls -->
+  <!-- Filters & Table Controls -->
   <section class="mt-6 mx-4 bg-white p-4 rounded shadow">
-    <h2 class="text-lg font-bold mb-4">📊 Chart Dashboard</h2>
+    <!-- List Buttons -->
+    <div id="listFilterButtons" role="tablist" class="flex flex-wrap gap-2 mb-4"></div>
 
-    <!-- Slider to control number of charts -->
-    <div class="mb-4">
-      <label for="chartCount" class="block mb-1 font-medium">🧮 Number of Chart Windows (max 6):</label>
-      <input id="chartCount" type="range" min="1" max="6" value="2" class="w-full" oninput="renderCharts(this.value)" />
-    </div>
-
-    <!-- Filter summary bar -->
-    <div id="activeFilters" class="mb-4 p-2 bg-blue-100 text-blue-800 rounded text-sm">
-      🔎 Active Filters: <span id="filterSummary">None</span>
-    </div>
-
-    <!-- Dynamic Chart Containers -->
-    <div id="chartContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <!-- JS inserts charts here -->
-    </div>
-  </section>
-
-
-
-  
-
-  <!-- Data Table -->
-  <section class="mt-6 mx-4 bg-white p-4 rounded shadow">
+    <!-- Column Select & Global Search -->
     <div class="flex flex-wrap justify-between mb-2">
-      
-      
-    </div>
-    <!-- Column + Sort + Search Controls -->
-    <div class="flex flex-wrap justify-between mb-2">
-      <div>
-        <label for="columnSelect" class="mr-2">🔽 Columns:</label>
-        <select id="columnSelect" multiple class="border rounded px-2 py-1">
-          <!-- Populated dynamically -->
-        </select>
-      </div>
-      <input id="globalSearch" type="text" placeholder="🔍 Search..." class="border px-2 py-1 rounded" />
-    </div>
-    <!-- Row Count Display -->
-    <div class="mb-2 text-sm text-gray-600" id="rowCountDisplay">
-      Total Rows: 0 | Filtered Rows: 0
+      <label for="columnSelect" class="mr-2">🔽 Columns:</label>
+      <select id="columnSelect" multiple class="border rounded px-2 py-1"></select>
+      <input id="globalSearch" type="text" placeholder="🔍 Search..." class="border px-2 py-1 rounded"/>
     </div>
 
-    <!-- Dynamic Data Table -->
+    <!-- Row Count -->
+    <div class="mb-2 text-sm text-gray-600 flex items-center">
+      <span id="rowCountDisplay">Total Rows: 0 | Filtered Rows: 0</span>
+      <button id="refreshCountBtn"
+              class="ml-4 px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm">
+        🔄 Refresh Count
+      </button>
+    </div>
+
+
+    <!-- Data Table -->
     <div id="dynamicTable" class="w-full overflow-auto"></div>
 
-    <!-- Export Button -->
-    <button class="mt-4 bg-green-500 text-white px-4 py-2 rounded" id="exportButton">📥 Export Table</button>
-
-    <!-- Tabulator JS and XLSX Support -->
-    <link href="https://unpkg.com/tabulator-tables@5.4.4/dist/css/tabulator.min.css" rel="stylesheet">
-    <script src="https://unpkg.com/tabulator-tables@5.4.4/dist/js/tabulator.min.js"></script>
+    <!-- Export Buttons -->
+    <div class="mt-4">
+      <button id="exportCsvButton"
+              class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
+              aria-label="Export data to CSV">
+        📥 Export CSV
+      </button>
+      <button id="exportPdfButton"
+              class="ml-2 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
+              aria-label="Export data to PDF">
+        📄 Export PDF
+      </button>
+      
+     
+    </div>
+    
   </section>
- 
 
-  <!-- JavaScript Upload Handler -->
+  <!-- Tabulator JS -->
+  <script src="https://unpkg.com/tabulator-tables@5.4.4/dist/js/tabulator.min.js"></script>
+
   <script>
-    function uploadFile() {
-      const fileInput = document.getElementById('fileInput');
-      const file = fileInput.files[0];
-      const status = document.getElementById('uploadStatus');
+  document.addEventListener("DOMContentLoaded", async () => {
+    // DOM refs & state
+    const spinner       = document.getElementById("loadingSpinner");
+    const statusDiv     = document.getElementById("uploadStatus");
+    const countSpan     = document.getElementById("dueCount");
+    const listDefs      = JSON.parse(document.getElementById("listDefinitions").textContent);
+    const listContainer = document.getElementById("listFilterButtons");
+    const colSelect     = document.getElementById("columnSelect");
+    const globalSearch  = document.getElementById("globalSearch");
+    const exportCsvBtn  = document.getElementById("exportCsvButton");
+    const exportPdfBtn  = document.getElementById("exportPdfButton");
+    let allColumns = [];
+    let table;
+    
+    // Spinner helpers
+    const showSpinner = () => spinner.style.display = "flex";
+    const hideSpinner = () => spinner.style.display = "none";
 
+    // Load JSON data from backend
+    async function loadData(){
+      showSpinner();
+      try {
+        const resp = await fetch("/api/data");
+        if (!resp.ok) throw new Error("Failed to fetch data");
+        return await resp.json();
+      } catch (e) {
+        console.error(e);
+        statusDiv.textContent = "❌ Failed to load data.";
+        statusDiv.className = "text-red-500";
+        return [];
+      } finally {
+        hideSpinner();
+      }
+    }
+
+    // Extract unique column names
+    function getUniqueColumns(data){
+      const keys = new Set();
+      data.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
+      return Array.from(keys);
+    }
+
+    // Update total/filtered row counts
+    function updateRowCount(){
+      const total    = table.getDataCount("all");
+      const filtered = table.getDataCount("active");
+      document.getElementById("rowCountDisplay")
+              .textContent = `Total Rows: ${total} | Filtered Rows: ${filtered}`;
+    }
+
+    // Build List-filter buttons
+    function buildListButtons(){
+      listContainer.innerHTML = "";
+      listDefs["All"] = allColumns; // ensure “All” maps to every column
+      Object.keys(listDefs).forEach(listName => {
+        const btn = document.createElement("button");
+        btn.type        = "button";
+        btn.textContent = listName === "All" ? "All Columns" : listName;
+        btn.className   = "filter-btn bg-gray-300 text-gray-800 px-3 py-1 rounded hover:bg-gray-400";
+        btn.dataset.list = listName;
+        btn.setAttribute("role", "tab");
+        btn.setAttribute("aria-pressed", "false");
+        btn.addEventListener("click", () => applyListFilter(listName, btn));
+        listContainer.append(btn);
+      });
+    }
+
+    // Initialize column multi-select
+    function initColumnSelect(){
+      colSelect.innerHTML = "";
+      allColumns.forEach((col,i) => {
+        const opt = document.createElement("option");
+        opt.value       = col;
+        opt.textContent = col;
+        if (i < 6) opt.selected = true;
+        colSelect.append(opt);
+      });
+      colSelect.addEventListener("change", () => {
+        const chosen = Array.from(colSelect.selectedOptions).map(o => o.value);
+        showHideColumns(chosen);
+      });
+    }
+
+    // Show/hide columns helper
+    function showHideColumns(colsToShow){
+      allColumns.forEach(col => {
+        if (colsToShow.includes(col)) table.showColumn(col);
+        else                          table.hideColumn(col);
+      });
+      updateRowCount();
+    }
+
+    // Build the Tabulator column definitions
+    function makeColumnsDef(){
+      return [
+        {
+          title: "✏️ Edit", field: "edit",
+          formatter: ()=>"<button class='bg-blue-500 text-white px-2 py-1 rounded text-sm'>Edit</button>",
+          width: 90, hozAlign: "center",
+          cellClick: (_e,cell)=> window.location.href = `/edit/${cell.getRow().getPosition()}`
+        },
+        ...allColumns.map(field => ({
+          title: field,
+          field: field,
+          headerFilter: "input",
+          headerFilterFunc: "=",
+          headerFilterFuncParams: { ignoreCase: true },
+          headerFilterLiveFilter: false,
+          sorter: "string"
+        }))
+      ];
+    }
+
+    // One-time Tabulator init
+    function initTabulator(data){
+      table = new Tabulator("#dynamicTable", {
+        data: data,
+        layout: "fitColumns",
+        pagination: "local",
+        paginationSize: 10,
+        columns: makeColumnsDef(),
+        dataFiltered: updateRowCount,
+        dataSorted:   updateRowCount
+      });
+      updateRowCount();
+    }
+
+    // Handle List-filter button clicks
+    function applyListFilter(listName, btn){
+      document.querySelectorAll(".filter-btn").forEach(b => {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
+      btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
+
+      const cols = listDefs[listName] || [];
+      showHideColumns(listName === "All" ? allColumns : cols);
+      // sync the multi-select
+      document.querySelectorAll("#columnSelect option").forEach(opt => {
+        opt.selected = (listName === "All") ? true : cols.includes(opt.value);
+      });
+      localStorage.setItem("selectedList", listName);
+    }
+
+    // Global “contains” search & row count update
+    globalSearch.addEventListener("input", e => {
+      const term = e.target.value.toLowerCase();
+      table.setFilter(row => 
+        Object.values(row).some(v => String(v).toLowerCase().includes(term))
+      );
+      updateRowCount();
+    });
+
+    // CSV export & row count update
+    exportCsvBtn.addEventListener("click", () => {
+      try {
+        showSpinner();
+        setTimeout(() => {
+          table.download("csv", "export.csv");
+          updateRowCount();
+          hideSpinner();
+        }, 100);
+      } catch (e) {
+        console.error("CSV Export Failed:", e);
+        statusDiv.textContent = "❌ CSV Export Failed.";
+        statusDiv.className = "text-red-500";
+        hideSpinner();
+      }
+    });
+
+    // PDF export & row count update
+    exportPdfBtn.addEventListener("click", () => {
+      try {
+        showSpinner();
+        setTimeout(() => {
+          table.download("pdf", "export.pdf", {
+            orientation: "landscape",
+            title: "Fire Compliance Data",
+            jsPDF: { unit: "pt", format: "a4" },
+            autoTable: { margin: { top: 50 }, styles: { fontSize: 6 } }
+          });
+          updateRowCount();
+          hideSpinner();
+        }, 100);
+      } catch (e) {
+        console.error("PDF Export Failed:", e);
+        statusDiv.textContent = "❌ PDF Export Failed.";
+        statusDiv.className = "text-red-500";
+        hideSpinner();
+      }
+    });
+    
+    document.getElementById("refreshCountBtn")
+            .addEventListener("click", updateRowCount);
+
+    // Poll the due-count endpoint every 10 minutes
+    async function refreshDueCount(){
+      try {
+        const resp = await fetch("/due-count");
+        if (!resp.ok) throw new Error();
+        const { count } = await resp.json();
+        countSpan.textContent = count;
+      } catch {
+        console.error("Failed to fetch due-count");
+        statusDiv.textContent = "❌ Failed to fetch task count.";
+        statusDiv.className = "text-red-500";
+      }
+    }
+    refreshDueCount();
+    setInterval(refreshDueCount, 600000);
+
+    // File upload handler
+    window.uploadFile = function(){
+      const inp  = document.getElementById("fileInput");
+      const file = inp.files[0];
       if (!file) {
-        status.textContent = '❌ Please select a file.';
-        status.className = 'text-red-500';
+        statusDiv.textContent = "❌ Please select a file.";
+        statusDiv.className   = "text-red-500";
         return;
       }
+      const fd = new FormData();
+      fd.append("file", file);
+      showSpinner();
+      fetch("/upload-csv/", { method: "POST", body: fd })
+        .then(r => r.json())
+        .then(data => {
+          statusDiv.textContent = (data.status==="success"?"✅ ":"❌ ") + data.message;
+          statusDiv.className   = data.status==="success"?"text-green-600":"text-red-500";
+          if (data.status === "success") location.reload();
+        })
+        .catch(() => {
+          statusDiv.textContent = "❌ Upload failed. Please try again.";
+          statusDiv.className   = "text-red-500";
+        })
+        .finally(hideSpinner);
+    };
 
-      const formData = new FormData();
-      formData.append('file', file);
+    // Bootstrap sequence
+    const data = await loadData();
+    allColumns = getUniqueColumns(data);
+    buildListButtons();
+    initColumnSelect();
+    initTabulator(data);
 
-      fetch('/upload-csv/', {
-        method: 'POST',
-        body: formData
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'success') {
-          status.textContent = '✅ ' + data.message;
-          status.className = 'text-green-600';
-        } else {
-          status.textContent = '❌ ' + data.message;
-          status.className = 'text-red-500';
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        status.textContent = '❌ Upload failed. Please try again.';
-        status.className = 'text-red-500';
-      });
-    }
+    // Restore last-used list filter (or default to “All”)
+    const saved     = localStorage.getItem("selectedList") || "All";
+    const btnToUse  = document.querySelector(`.filter-btn[data-list="${saved}"]`) ||
+                     document.querySelector(`.filter-btn[data-list="All"]`);
+    applyListFilter(btnToUse.dataset.list, btnToUse);
+  });
   </script>
-  <script>
-    async function fetchDueCount() {
-      try {
-        const response = await fetch('/due-count');
-        const data = await response.json();
-
-        const countSpan = document.getElementById('dueCount');
-        countSpan.textContent = data.count;
-      } catch (error) {
-        console.error('Failed to fetch due count:', error);
-      }
-    }
-
-    // Call once on load and then every 10 minutes
-    fetchDueCount();
-    setInterval(fetchDueCount, 60000); // 10 minutes
-  </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    let activeFilters = {};
-    let chartCount = 2;
-
-    // Sample dataset (replace this with AJAX-loaded real data)
-    let chartData = [];
-
-    async function fetchChartData() {
-      try {
-        const response = await fetch("/api/data");
-        chartData = await response.json();
-        renderCharts(chartCount);
-      } catch (error) {
-        console.error("Error loading chart data:", error);
-      }
-    }
-
-
-    function renderCharts(count) {
-      chartCount = parseInt(count);
-      const container = document.getElementById("chartContainer");
-      container.innerHTML = ""; // clear existing
-
-      for (let i = 0; i < chartCount; i++) {
-        const chartCard = document.createElement("div");
-        chartCard.className = "bg-white p-4 rounded shadow";
-        chartCard.innerHTML = `
-          <div class="mb-2">
-            <label class="text-sm font-medium">🔧 Filter by Region:</label>
-            <select onchange="updateFilter(this.value, 'Region')" class="border rounded px-2 py-1 w-full mt-1">
-              <option value="">All</option>
-              <option value="North">North</option>
-              <option value="South">South</option>
-              <option value="East">East</option>
-            </select>
-          </div>
-          <canvas id="chart-${i}" class="w-full h-48"></canvas>
-        `;
-        container.appendChild(chartCard);
-
-        drawChart(`chart-${i}`, i);
-      }
-      updateFilterSummary();
-    }
-
-    function updateFilter(value, key) {
-      if (value === "") {
-        delete activeFilters[key];
-      } else {
-        activeFilters[key] = value;
-      }
-      renderCharts(chartCount); // re-render with filter
-      updateFilterSummary();
-    }
-
-    function updateFilterSummary() {
-      const summary = document.getElementById("filterSummary");
-      const entries = Object.entries(activeFilters);
-      summary.textContent = entries.length
-        ? entries.map(([k, v]) => `${k}: ${v}`).join(", ")
-        : "None";
-    }
-
-    function drawChart(canvasId, chartIndex) {
-      const ctx = document.getElementById(canvasId).getContext("2d");
-
-      switch (chartIndex) {
-        case 0: // 📍 Region Overview
-          const regionCounts = {};
-          chartData.forEach(row => {
-            const r = row["Region"] || "Unknown";
-            regionCounts[r] = (regionCounts[r] || 0) + 1;
-          });
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: Object.keys(regionCounts),
-              datasets: [{
-                label: 'Audits by Region',
-                data: Object.values(regionCounts),
-                backgroundColor: '#60a5fa'
-              }]
-            }
-          });
-          break;
-
-        case 1: // 📈 Audit Trend Over Time
-          const trendCounts = {};
-          chartData.forEach(row => {
-            let d = row["Scheduled Date"];
-            if (d) {
-              try {
-                const month = new Date(d).toLocaleString('default', { month: 'short', year: 'numeric' });
-                trendCounts[month] = (trendCounts[month] || 0) + 1;
-              } catch (_) {}
-            }
-          });
-          new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels: Object.keys(trendCounts),
-              datasets: [{
-                label: 'Audits Scheduled',
-                data: Object.values(trendCounts),
-                borderColor: '#4ade80',
-                backgroundColor: '#bbf7d0',
-                fill: true,
-                tension: 0.4
-              }]
-            }
-          });
-          break;
-
-        case 2: // 🥧 Status Distribution
-          const statusCounts = {};
-          chartData.forEach(row => {
-            const s = row["Status"] || "Unknown";
-            statusCounts[s] = (statusCounts[s] || 0) + 1;
-          });
-          new Chart(ctx, {
-            type: 'pie',
-            data: {
-              labels: Object.keys(statusCounts),
-              datasets: [{
-                data: Object.values(statusCounts),
-                backgroundColor: ['#f87171', '#facc15', '#34d399', '#60a5fa', '#a78bfa']
-              }]
-            }
-          });
-          break;
-
-        case 3: // 🧾 Work Description Bar
-          const taskTypes = {};
-          chartData.forEach(row => {
-            const w = row["Work Description"] || "Other";
-            taskTypes[w] = (taskTypes[w] || 0) + 1;
-          });
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: Object.keys(taskTypes),
-              datasets: [{
-                label: 'Task Types',
-                data: Object.values(taskTypes),
-                backgroundColor: '#fcd34d'
-              }]
-            }
-          });
-          break;
-
-        case 4: // 💰 Invoice by Region
-          const invoiceByRegion = {};
-          chartData.forEach(row => {
-            const region = row["Region"] || "Unknown";
-            const amount = parseFloat(row["Invoice Amount"]) || 0;
-            invoiceByRegion[region] = (invoiceByRegion[region] || 0) + amount;
-          });
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: Object.keys(invoiceByRegion),
-              datasets: [{
-                label: 'Invoice $ by Region',
-                data: Object.values(invoiceByRegion),
-                backgroundColor: '#fca5a5'
-              }]
-            }
-          });
-          break;
-
-        case 5: // 🔍 Site-Level Overview (Address)
-          const addressCounts = {};
-          chartData.forEach(row => {
-            const a = row["Address"] || "Unknown";
-            addressCounts[a] = (addressCounts[a] || 0) + 1;
-          });
-          new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: Object.keys(addressCounts).slice(0, 10),
-              datasets: [{
-                label: 'Audits by Address',
-                data: Object.values(addressCounts).slice(0, 10),
-                backgroundColor: '#93c5fd'
-              }]
-            }
-          });
-          break;
-      }
-    }
-
-
-
-
-  // Initial chart render
-  // Initial load
-    fetchChartData();
-
-  </script>
-  <script>
-    document.addEventListener("DOMContentLoaded", async () => {
-      const tableElement = document.getElementById("dynamicTable");
-      const columnSelect = document.getElementById("columnSelect");
-      const globalSearch = document.getElementById("globalSearch");
-
-      let table;
-      let allData = [];
-
-      // Fetch data from backend
-      const fetchData = async () => {
-        const response = await fetch("/api/data");
-        const data = await response.json();
-        allData = data;
-        return data;
-      };
-
-      // Get all unique keys from dataset
-      const getColumnOptions = (data) => {
-        const keys = new Set();
-        data.forEach(row => Object.keys(row).forEach(k => keys.add(k)));
-        return Array.from(keys);
-      };
-
-      // Render column selector
-      const renderColumnSelector = (columns) => {
-        columnSelect.innerHTML = "";
-        columns.forEach(col => {
-          const option = document.createElement("option");
-          option.value = col;
-          option.textContent = col;
-          columnSelect.appendChild(option);
-        });
-
-        // Default: select first 6
-        for (let i = 0; i < Math.min(6, columns.length); i++) {
-          columnSelect.options[i].selected = true;
-        }
-      };
-
-      // Initialize Tabulator table
-      const initTable = (data, selectedColumns) => {
-        const columns = [
-          {
-            title: "✏️ Edit",
-            field: "edit",
-            formatter: () => "<button class='bg-blue-500 text-white px-2 py-1 rounded text-sm'>Edit</button>",
-            width: 90,
-            hozAlign: "center",
-            cellClick: function (e, cell) {
-              const rowIndex = cell.getRow().getPosition();
-              window.location.href = `/edit/${rowIndex}`;
-            }
-
-          },
-          ...selectedColumns.map(field => ({
-            title: field,
-            field: field,
-            headerFilter: "input",
-            sorter: "string",
-          }))
-        ];
-
-
-        if (table) {
-          table.setColumns(columns);
-          table.setData(data);
-          updateRowCountDisplay();
-        } else {
-          table = new Tabulator(tableElement, {
-            data: data,
-            layout: "fitColumns",
-            pagination: "local",
-            paginationSize: 10,
-            columns: columns,
-          });
-          updateRowCountDisplay();
-        }
-      };
-      // Function to update row count display
-      function updateRowCountDisplay() {
-        const total = allData.length;
-        const filtered = table.getDataCount("active");
-        document.getElementById("rowCountDisplay").textContent =
-          `Total Rows: ${total} | Filtered Rows: ${filtered}`;
-      }
-
-      // Load everything
-      const init = async () => {
-        const data = await fetchData();
-        const allColumns = getColumnOptions(data);
-        renderColumnSelector(allColumns);
-        const selectedColumns = Array.from(columnSelect.selectedOptions).map(opt => opt.value);
-        initTable(data, selectedColumns);
-      };
-
-      // On column change
-      columnSelect.addEventListener("change", () => {
-        const selected = Array.from(columnSelect.selectedOptions).map(opt => opt.value);
-        initTable(allData, selected);
-      updateRowCountDisplay();
-      });
-
-      // Global search
-      globalSearch.addEventListener("input", () => {
-        const keyword = globalSearch.value.toLowerCase();
-        table.setFilter((data) => {
-          return Object.values(data).some(val =>
-            String(val).toLowerCase().includes(keyword)
-          );
-       
-        });
-        updateRowCountDisplay();
-      });
-
-      // Export to CSV
-      document.getElementById("exportButton").addEventListener("click", () => {
-        table.download("csv", "export.csv");
-      });
-      
-
-      
-      // Start
-      init();
-    });
-  </script>
-
 </body>
 </html>
+
