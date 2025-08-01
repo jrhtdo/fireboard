@@ -131,6 +131,10 @@
               class="ml-4 px-2 py-1 bg-gray-200 rounded hover:bg-gray-300 text-sm">
         🔄 Refresh Count
       </button>
+      <button id="bulkEditButton"
+              class="ml-auto bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition">
+        ✏️ Bulk Edit
+      </button>
     </div>
 
 
@@ -263,6 +267,8 @@
         ...allColumns.map(field => ({
           title: field,
           field: field,
+          widthGrow: 1,
+          widthShrink: 1,
           headerFilter: "input",
           headerFilterFunc: "=",
           headerFilterFuncParams: { ignoreCase: true },
@@ -327,6 +333,57 @@
         statusDiv.textContent = "❌ CSV Export Failed.";
         statusDiv.className = "text-red-500";
         hideSpinner();
+      }
+    });
+    
+    document.getElementById("bulkEditButton").addEventListener("click", async () => {
+      // 1) Ask which column to update
+      const column = prompt(
+        "Column to edit:\n" + allColumns.join("\n")
+      );
+      if (!column || !allColumns.includes(column)) {
+        return alert("Invalid column name.");
+      }
+
+      // 2) Ask for the new value
+      const newValue = prompt(`Enter the new value for "${column}":`);
+      if (newValue === null) return; // user cancelled
+      
+      bulkEditBtn.disabled = true;
+
+      // 3) Get all currently filtered rows
+      const rows = table.getRows("active");
+
+      // 4) Apply update in the UI
+      rows.forEach(row => {
+        row.update({ [column]: newValue });
+      });
+
+      updateRowCount(); // refresh counts
+
+      // 5) Build a payload of { rowIndex, column, value } for the backend
+      const updates = rows.map(row => ({
+        rowIndex: row.getPosition(), 
+        column,
+        value: newValue
+      }));
+
+      // 6) Send to your new bulk‐update endpoint
+      try {
+        const resp = await fetch("/api/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updates })
+        });
+        const result = await resp.json();
+        if (result.status !== "success") throw new Error(result.message);
+        alert("✅ Bulk edit saved!");
+      } catch (err) {
+        console.error("Bulk edit failed:", err);
+        alert("❌ Bulk edit failed: " + err.message);
+      } finally {
+        // 7) Re-enable button when done
+        bulkEditBtn.disabled = false;
       }
     });
 
@@ -403,6 +460,10 @@
     buildListButtons();
     initColumnSelect();
     initTabulator(data);
+    
+    window.addEventListener("resize", () => {
+      table.redraw(true);
+    });
 
     // Restore last-used list filter (or default to “All”)
     const saved     = localStorage.getItem("selectedList") || "All";

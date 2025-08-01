@@ -207,4 +207,29 @@ async def save_edit(request: Request, row_id: int):
     load_all_tasks()
 
     return HTMLResponse(content=f"<script>alert('✅ Row updated successfully!'); window.location.href='/'</script>")
+from pydantic import BaseModel
+from typing import List
+
+class BulkUpdateItem(BaseModel):
+    rowIndex: int
+    column: str
+    value: str
+
+class BulkUpdatePayload(BaseModel):
+    updates: List[BulkUpdateItem]
+
+@app.post("/api/bulk-update")
+def bulk_update(payload: BulkUpdatePayload):
+    # Load into DataFrame
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("SELECT * FROM tasks", conn)
+    # Apply each update
+    for item in payload.updates:
+        if item.column in df.columns and 0 <= item.rowIndex < len(df):
+            df.at[item.rowIndex, item.column] = item.value
+    # Write back
+    df.to_sql("tasks", conn, if_exists="replace", index=False)
+    conn.close()
+    load_all_tasks()  # refresh your in-memory cache
+    return {"status": "success", "message": "Bulk update applied."}
 
