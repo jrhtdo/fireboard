@@ -1,0 +1,55 @@
+{
+  "All": [
+    "Region",
+    "Address",
+    "Unit No",
+    "Run Code",
+    "Level 1",
+    "Scheduled Date",
+    "Plan Finish Date",
+    "Scheduled Time",
+    "Sequence",
+    "Equipment_No",
+    "Audit WorkOrder",
+    "Repair WorkOrder",
+    "Work Description",
+    "Status",
+    "Assigned Person",
+    "Safety Alert",
+    "Post Code",
+    "Note",
+    "Month",
+    "Assignee",
+    "Perceived sites"
+  ],
+  "List 1": [
+    "Region"
+  ],
+  "List 2": [
+    "Perceived sites",
+    "Equipment_No"
+  ],
+  "List 3": [
+    "Address",
+    "Unit No",
+    "Scheduled Time",
+    "Sequence"
+  ],
+  "List 4": [
+    "Status"
+  ],
+  "List 5": [
+    "Safety Alert",
+    "Plan Finish Date",
+    "Note"
+  ],
+  "List 6": [
+    "Scheduled Date",
+    "Month",
+    "Assignee"
+  ],
+  "list 7": [
+    "Region",
+    "Address"
+  ]
+}

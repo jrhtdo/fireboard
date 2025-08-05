@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import sqlite3
 import os
+import json
 from pathlib import Path
 app = FastAPI()
 
@@ -18,6 +19,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 DB_PATH = os.path.join(os.path.dirname(__file__), "tasks.db")
+LISTS_PATH = BASE_DIR / "data" / "list_defs.json"
 
 
 REQUIRED_COLUMNS = [
@@ -232,4 +234,24 @@ def bulk_update(payload: BulkUpdatePayload):
     conn.close()
     load_all_tasks()  # refresh your in-memory cache
     return {"status": "success", "message": "Bulk update applied."}
+from fastapi import Body
+
+@app.get("/api/lists")
+def get_lists():
+    try:
+        with open(LISTS_PATH, "r") as f:
+            return JSONResponse(content=json.load(f))
+    except FileNotFoundError:
+        return JSONResponse(content={}, status_code=200)
+
+@app.post("/api/lists")
+def save_lists(payload: dict = Body(...)):
+    try:
+        with open(LISTS_PATH, "w") as f:
+            json.dump(payload, f, indent=2)
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+from io import StringIO
+
 

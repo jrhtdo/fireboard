@@ -33,37 +33,10 @@
   </style>
 
   <!-- List definitions JSON -->
-  <script type="application/json" id="listDefinitions">
-  {
-    "All": [
-      "Region",
-      "Address",
-      "Unit No",
-      "Perceived sites",
-      "Scheduled Date",
-      "Plan Finish Date",
-      "Scheduled Time",
-      "Sequence",
-      "Equipment_No",
-      "Audit WorkOrder",
-      "Repair WorkOrder",
-      "Work Description",
-      "Status",
-      "Assigned Person",
-      "Safety Alert",
-      "Post Code",
-      "Note",
-      "Month",
-      "Assignee"
-    ],
-    "List 1": ["Region"],
-    "List 2": ["Perceived sites", "Equipment_No", "Audit WorkOrder", "Repair WorkOrder"],
-    "List 3": ["Unit No", "Address", "Post Code", "Sequence", "Scheduled Time"],
-    "List 4": ["Status"],
-    "List 5": ["Safety Alert"],
-    "List 6": ["Scheduled Date", "Plan Finish Date", "Month"]
-  }
+  <script>
+    let listDefs = {}; // to be fetched from server
   </script>
+
 
   <!-- Tabulator CSS -->
   <link href="https://unpkg.com/tabulator-tables@5.4.4/dist/css/tabulator.min.css" rel="stylesheet"/>
@@ -123,6 +96,11 @@
       <select id="columnSelect" multiple class="border rounded px-2 py-1"></select>
       <input id="globalSearch" type="text" placeholder="🔍 Search..." class="border px-2 py-1 rounded"/>
     </div>
+    <div class="flex gap-2 items-center mb-4">
+      <button id="editListsBtn" class="bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">
+        ⚙️ Edit Lists
+      </button>
+    </div>
 
     <!-- Row Count -->
     <div class="mb-2 text-sm text-gray-600 flex items-center">
@@ -168,7 +146,7 @@
     const spinner       = document.getElementById("loadingSpinner");
     const statusDiv     = document.getElementById("uploadStatus");
     const countSpan     = document.getElementById("dueCount");
-    const listDefs      = JSON.parse(document.getElementById("listDefinitions").textContent);
+    await loadListDefinitions();
     const listContainer = document.getElementById("listFilterButtons");
     const colSelect     = document.getElementById("columnSelect");
     const globalSearch  = document.getElementById("globalSearch");
@@ -212,6 +190,17 @@
       document.getElementById("rowCountDisplay")
               .textContent = `Total Rows: ${total} | Filtered Rows: ${filtered}`;
     }
+    // Load list definitions from backend
+    async function loadListDefinitions(){
+      try {
+        const res = await fetch("/api/lists");
+        if (!res.ok) throw new Error("Failed to fetch list definitions");
+        listDefs = await res.json();
+      } catch (e) {
+        console.error("Failed to load list definitions:", e);
+        listDefs = { "All": allColumns };
+      }
+    }
 
     // Build List-filter buttons
     function buildListButtons(){
@@ -229,6 +218,47 @@
         listContainer.append(btn);
       });
     }
+    document.getElementById("editListsBtn").addEventListener("click", () => {
+      const listNames = Object.keys(listDefs).filter(l => l !== "All");
+      const listName = prompt("Which list do you want to edit?\n" + listNames.join("\n") + "\n(Type NEW to add new list)");
+      if (!listName) return;
+
+      let currentCols = listDefs[listName] || [];
+
+      const colInput = prompt(
+        `Columns for ${listName}:\n(comma separated)\n\nAvailable columns:\n${allColumns.join(", ")}`,
+        currentCols.join(", ")
+      );
+      if (colInput === null) return;
+
+      const cleaned = colInput.split(",").map(c => c.trim()).filter(Boolean);
+
+      if (cleaned.length === 0) {
+        // user removed all columns → remove list
+        if (confirm(`Remove list "${listName}"?`)) delete listDefs[listName];
+      } else {
+        listDefs[listName] = cleaned;
+      }
+
+      // Save updated definitions to backend
+      fetch("/api/lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(listDefs)
+      })
+        .then(r => {
+          if (!r.ok) throw new Error("Failed to save lists");
+          return r.json();
+        })
+        .then(data => {
+          alert("✅ List updated!");
+          buildListButtons();
+        })
+        .catch(err => {
+          console.error("Failed to save:", err);
+          alert("❌ Failed to save lists.");
+        });
+    });
 
     // Initialize column multi-select
     function initColumnSelect(){
@@ -349,7 +379,7 @@
       const newValue = prompt(`Enter the new value for "${column}":`);
       if (newValue === null) return; // user cancelled
       
-      bulkEditBtn.disabled = true;
+      
 
       // 3) Get all currently filtered rows
       const rows = table.getRows("active");
@@ -381,10 +411,7 @@
       } catch (err) {
         console.error("Bulk edit failed:", err);
         alert("❌ Bulk edit failed: " + err.message);
-      } finally {
-        // 7) Re-enable button when done
-        bulkEditBtn.disabled = false;
-      }
+      } 
     });
 
     // PDF export & row count update
