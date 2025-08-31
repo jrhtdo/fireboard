@@ -131,10 +131,53 @@
               aria-label="Export data to PDF">
         📄 Export PDF
       </button>
-      
+      <button id="saveFilterButton" class="ml-2 bg-yellow-400 text-white px-4 py-2 rounded hover:bg-yellow-500">💾 Save Filter</button>
+      <button id="savedExportsButton" class="ml-2 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700">📚 Saved Exports</button>
+ 
      
     </div>
-    
+    <!-- Saved Exports Modal -->
+    <div id="savedExportsModal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+      <!-- backdrop -->
+      <div id="savedExportsBackdrop" class="absolute inset-0 bg-black opacity-50"></div>
+
+      <!-- modal panel -->
+      <div class="relative max-w-4xl mx-auto mt-20 bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b">
+          <h3 class="text-lg font-semibold">📚 Saved Exports</h3>
+          <button id="savedExportsCloseBtn" class="text-gray-600 hover:text-gray-800 px-2 py-1 rounded" aria-label="Close saved exports">✕</button>
+        </div>
+
+        <div class="p-4 max-h-96 overflow-auto">
+          <div id="savedExportsList" class="space-y-2">
+            <div class="text-sm text-gray-500" id="savedExportsEmpty">Loading...</div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 p-4 border-t bg-gray-50">
+          <div class="flex items-center gap-2">
+            <button id="downloadCombinedCsvBtn" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm">
+              ⤓ Download Combined CSV
+            </button>
+
+            <button id="downloadCombinedPdfBtn" class="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 text-sm">
+              📄 Download Combined PDF
+            </button>
+
+            <button id="clearAllExportsBtn" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm">
+              🧹 Clear All
+            </button>
+          </div>
+
+          <div>
+            <button id="savedExportsDoneBtn" class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800 text-sm">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- Tabulator JS -->
@@ -142,24 +185,45 @@
 
   <script>
   document.addEventListener("DOMContentLoaded", async () => {
-    // DOM refs & state
+    /* -----------------------
+       DOM refs & global state
+       ----------------------- */
     const spinner       = document.getElementById("loadingSpinner");
     const statusDiv     = document.getElementById("uploadStatus");
     const countSpan     = document.getElementById("dueCount");
-    await loadListDefinitions();
     const listContainer = document.getElementById("listFilterButtons");
     const colSelect     = document.getElementById("columnSelect");
     const globalSearch  = document.getElementById("globalSearch");
     const exportCsvBtn  = document.getElementById("exportCsvButton");
     const exportPdfBtn  = document.getElementById("exportPdfButton");
+    const saveFilterBtn = document.getElementById("saveFilterButton");
+    const savedExportsBtn = document.getElementById("savedExportsButton");
     let allColumns = [];
     let table;
-    
-    // Spinner helpers
-    const showSpinner = () => spinner.style.display = "flex";
-    const hideSpinner = () => spinner.style.display = "none";
 
-    // Load JSON data from backend
+    // local listDefs (fetched from /api/lists)
+    let listDefs = {};
+
+    /* -----------------------
+       Spinner helpers
+       ----------------------- */
+    const showSpinner = () => { if (spinner) spinner.style.display = "flex"; };
+    const hideSpinner = () => { if (spinner) spinner.style.display = "none"; };
+
+    /* -----------------------
+       Data loading helpers
+       ----------------------- */
+    async function loadListDefinitions(){
+      try {
+        const res = await fetch("/api/lists");
+        if (!res.ok) throw new Error("Failed to fetch list definitions");
+        listDefs = await res.json();
+      } catch (e) {
+        console.error("Failed to load list definitions:", e);
+        listDefs = { "All": allColumns };
+      }
+    }
+
     async function loadData(){
       showSpinner();
       try {
@@ -176,33 +240,29 @@
       }
     }
 
-    // Extract unique column names
     function getUniqueColumns(data){
       const keys = new Set();
       data.forEach(r => Object.keys(r).forEach(k => keys.add(k)));
       return Array.from(keys);
     }
 
-    // Update total/filtered row counts
+    /* -----------------------
+       Row counts & refresh
+       ----------------------- */
     function updateRowCount(){
-      const total    = table.getDataCount("all");
-      const filtered = table.getDataCount("active");
-      document.getElementById("rowCountDisplay")
-              .textContent = `Total Rows: ${total} | Filtered Rows: ${filtered}`;
-    }
-    // Load list definitions from backend
-    async function loadListDefinitions(){
       try {
-        const res = await fetch("/api/lists");
-        if (!res.ok) throw new Error("Failed to fetch list definitions");
-        listDefs = await res.json();
+        const total    = table ? table.getDataCount("all") : 0;
+        const filtered = table ? table.getDataCount("active") : 0;
+        document.getElementById("rowCountDisplay")
+                .textContent = `Total Rows: ${total} | Filtered Rows: ${filtered}`;
       } catch (e) {
-        console.error("Failed to load list definitions:", e);
-        listDefs = { "All": allColumns };
+        console.error("updateRowCount error", e);
       }
     }
 
-    // Build List-filter buttons
+    /* -----------------------
+       Lists UI
+       ----------------------- */
     function buildListButtons(){
       listContainer.innerHTML = "";
       listDefs["All"] = allColumns; // ensure “All” maps to every column
@@ -218,7 +278,9 @@
         listContainer.append(btn);
       });
     }
+
     document.getElementById("editListsBtn").addEventListener("click", () => {
+      // simple edit flow (prompt-based)
       const listNames = Object.keys(listDefs).filter(l => l !== "All");
       const listName = prompt("Which list do you want to edit?\n" + listNames.join("\n") + "\n(Type NEW to add new list)");
       if (!listName) return;
@@ -260,7 +322,9 @@
         });
     });
 
-    // Initialize column multi-select
+    /* -----------------------
+       Column multi-select
+       ----------------------- */
     function initColumnSelect(){
       colSelect.innerHTML = "";
       allColumns.forEach((col,i) => {
@@ -276,16 +340,22 @@
       });
     }
 
-    // Show/hide columns helper
     function showHideColumns(colsToShow){
+      if (!table) return;
       allColumns.forEach(col => {
-        if (colsToShow.includes(col)) table.showColumn(col);
-        else                          table.hideColumn(col);
+        try {
+          if (colsToShow.includes(col)) table.showColumn(col);
+          else                          table.hideColumn(col);
+        } catch (e) {
+          // ignore missing column errors
+        }
       });
       updateRowCount();
     }
 
-    // Build the Tabulator column definitions
+    /* -----------------------
+       Tabulator setup
+       ----------------------- */
     function makeColumnsDef(){
       return [
         {
@@ -308,7 +378,6 @@
       ];
     }
 
-    // One-time Tabulator init
     function initTabulator(data){
       table = new Tabulator("#dynamicTable", {
         data: data,
@@ -322,7 +391,6 @@
       updateRowCount();
     }
 
-    // Handle List-filter button clicks
     function applyListFilter(listName, btn){
       document.querySelectorAll(".filter-btn").forEach(b => {
         b.classList.remove("active");
@@ -340,16 +408,21 @@
       localStorage.setItem("selectedList", listName);
     }
 
-    // Global “contains” search & row count update
+    /* -----------------------
+       Search
+       ----------------------- */
     globalSearch.addEventListener("input", e => {
       const term = e.target.value.toLowerCase();
+      if (!table) return;
       table.setFilter(row => 
         Object.values(row).some(v => String(v).toLowerCase().includes(term))
       );
       updateRowCount();
     });
 
-    // CSV export & row count update
+    /* -----------------------
+       Export buttons (table-level)
+       ----------------------- */
     exportCsvBtn.addEventListener("click", () => {
       try {
         showSpinner();
@@ -365,56 +438,7 @@
         hideSpinner();
       }
     });
-    
-    document.getElementById("bulkEditButton").addEventListener("click", async () => {
-      // 1) Ask which column to update
-      const column = prompt(
-        "Column to edit:\n" + allColumns.join("\n")
-      );
-      if (!column || !allColumns.includes(column)) {
-        return alert("Invalid column name.");
-      }
 
-      // 2) Ask for the new value
-      const newValue = prompt(`Enter the new value for "${column}":`);
-      if (newValue === null) return; // user cancelled
-      
-      
-
-      // 3) Get all currently filtered rows
-      const rows = table.getRows("active");
-
-      // 4) Apply update in the UI
-      rows.forEach(row => {
-        row.update({ [column]: newValue });
-      });
-
-      updateRowCount(); // refresh counts
-
-      // 5) Build a payload of { rowIndex, column, value } for the backend
-      const updates = rows.map(row => ({
-        rowIndex: row.getPosition(), 
-        column,
-        value: newValue
-      }));
-
-      // 6) Send to your new bulk‐update endpoint
-      try {
-        const resp = await fetch("/api/bulk-update", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ updates })
-        });
-        const result = await resp.json();
-        if (result.status !== "success") throw new Error(result.message);
-        alert("✅ Bulk edit saved!");
-      } catch (err) {
-        console.error("Bulk edit failed:", err);
-        alert("❌ Bulk edit failed: " + err.message);
-      } 
-    });
-
-    // PDF export & row count update
     exportPdfBtn.addEventListener("click", () => {
       try {
         showSpinner();
@@ -435,30 +459,336 @@
         hideSpinner();
       }
     });
-    
-    document.getElementById("refreshCountBtn")
-            .addEventListener("click", updateRowCount);
 
-    // Poll the due-count endpoint every 10 minutes
-    async function refreshDueCount(){
-      try {
-        const resp = await fetch("/due-count");
-        if (!resp.ok) throw new Error();
-        const { count } = await resp.json();
-        countSpan.textContent = count;
-      } catch {
-        console.error("Failed to fetch due-count");
-        statusDiv.textContent = "❌ Failed to fetch task count.";
-        statusDiv.className = "text-red-500";
+    /* -----------------------
+       Bulk Edit
+       ----------------------- */
+    document.getElementById("bulkEditButton").addEventListener("click", async () => {
+      if (!allColumns || allColumns.length === 0) { alert("No columns available."); return; }
+      const column = prompt("Column to edit:\n" + allColumns.join("\n"));
+      if (!column || !allColumns.includes(column)) {
+        return alert("Invalid column name.");
       }
-    }
-    refreshDueCount();
-    setInterval(refreshDueCount, 600000);
+      const newValue = prompt(`Enter the new value for "${column}":`);
+      if (newValue === null) return; // user cancelled
 
-    // File upload handler
+      const rows = table.getRows("active");
+      rows.forEach(row => row.update({ [column]: newValue }));
+      updateRowCount();
+
+      const updates = rows.map(row => ({
+        rowIndex: row.getPosition(),
+        column,
+        value: newValue
+      }));
+
+      try {
+        const resp = await fetch("/api/bulk-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updates })
+        });
+        const result = await resp.json();
+        if (result.status !== "success") throw new Error(result.message || "bulk update failed");
+        alert("✅ Bulk edit saved!");
+      } catch (err) {
+        console.error("Bulk edit failed:", err);
+        alert("❌ Bulk edit failed: " + (err.message || err));
+      } 
+    });
+
+    /* -----------------------
+       Save filtered rows (Saved Exports)
+       ----------------------- */
+    saveFilterBtn.addEventListener("click", async () => {
+      try {
+        const rows = table.getData("active"); // currently filtered rows
+        if (!rows || rows.length === 0) return alert("No rows to save.");
+        const name = prompt(`Name for saved set (optional). ${rows.length} rows will be saved:`, `Saved set ${new Date().toLocaleString()}`);
+        if (name === null) return; // cancelled
+        showSpinner();
+        const resp = await fetch("/api/save-filtered", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, rows })
+        });
+        const result = await resp.json();
+        hideSpinner();
+        if (result.status === "success") {
+          alert("✅ Saved filter set!");
+        } else {
+          alert("❌ Failed to save: " + (result.message || JSON.stringify(result)));
+        }
+      } catch (e) {
+        hideSpinner();
+        console.error(e);
+        alert("❌ Error saving filter.");
+      }
+    });
+
+    /* -----------------------
+       Saved Exports Modal + PDF helpers
+       ----------------------- */
+    (function () {
+      const modal     = document.getElementById("savedExportsModal");
+      const backdrop  = document.getElementById("savedExportsBackdrop");
+      const listEl    = document.getElementById("savedExportsList");
+      const closeBtn  = document.getElementById("savedExportsCloseBtn");
+      const doneBtn   = document.getElementById("savedExportsDoneBtn");
+      const dlCsvBtn  = document.getElementById("downloadCombinedCsvBtn");
+      const dlPdfBtn  = document.getElementById("downloadCombinedPdfBtn");
+      const clearAllBtn = document.getElementById("clearAllExportsBtn");
+
+      function _showSpinner(){ if (typeof showSpinner === "function") showSpinner(); else document.body.style.cursor = "wait"; }
+      function _hideSpinner(){ if (typeof hideSpinner === "function") hideSpinner(); else document.body.style.cursor = "default"; }
+
+      function openModal(){
+        modal.classList.remove("hidden");
+        modal.setAttribute("aria-hidden", "false");
+        loadSavedExports();
+      }
+      function closeModal(){
+        modal.classList.add("hidden");
+        modal.setAttribute("aria-hidden", "true");
+        listEl.innerHTML = '<div class="text-sm text-gray-500" id="savedExportsEmpty">Loading...</div>';
+      }
+
+      function fmtTs(ts){
+        try { return new Date(ts * 1000).toLocaleString(); } catch { return ""; }
+      }
+
+      async function loadSavedExports(){
+        _showSpinner();
+        try {
+          const resp = await fetch("/api/saved-exports");
+          if (!resp.ok) throw new Error("Failed to fetch saved exports");
+          const items = await resp.json();
+          renderList(items || []);
+        } catch (e) {
+          console.error("Failed to load saved exports", e);
+          listEl.innerHTML = '<div class="text-sm text-red-500">Failed to load saved exports.</div>';
+        } finally {
+          _hideSpinner();
+        }
+      }
+
+      function renderList(items){
+        listEl.innerHTML = "";
+        if (!items || items.length === 0){
+          listEl.innerHTML = '<div class="text-sm text-gray-600">No saved exports found.</div>';
+          return;
+        }
+
+        items.forEach(it => {
+          const row = document.createElement("div");
+          row.className = "flex items-center justify-between gap-4 bg-white p-3 rounded border";
+
+          const left = document.createElement("div");
+          left.className = "min-w-0";
+          const title = document.createElement("div");
+          title.className = "font-medium truncate";
+          title.textContent = it.name || (`Saved ${it.id}`);
+          const meta = document.createElement("div");
+          meta.className = "text-xs text-gray-500";
+          meta.textContent = `${it.count} rows — ${fmtTs(it.created_at)}`;
+          left.appendChild(title);
+          left.appendChild(meta);
+
+          const right = document.createElement("div");
+          right.className = "flex items-center gap-2";
+
+          // CSV download
+          const dlBtn = document.createElement("button");
+          dlBtn.className = "bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 text-sm";
+          dlBtn.textContent = "⤓ CSV";
+          dlBtn.onclick = () => { window.location.href = `/api/saved-exports/${it.id}/download`; };
+
+          // PDF download (client-side)
+          const pdfBtn = document.createElement("button");
+          pdfBtn.className = "bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 text-sm";
+          pdfBtn.textContent = "📄 PDF";
+          pdfBtn.onclick = async () => {
+            _showSpinner();
+            try {
+              const r = await fetch(`/api/saved-exports/${it.id}`);
+              if (!r.ok) throw new Error("Failed to fetch saved export");
+              const payload = await r.json();
+              if (!payload || !payload.rows || !Array.isArray(payload.rows) || payload.rows.length === 0) { alert("No rows"); return; }
+              await generateAndDownloadPDF(payload.rows, (payload.name || "saved_export"));
+            } catch (e) {
+              console.error(e);
+              alert("Failed to generate PDF for this set.");
+            } finally {
+              _hideSpinner();
+            }
+          };
+
+          // Delete button
+          const delBtn = document.createElement("button");
+          delBtn.className = "bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 text-sm";
+          delBtn.textContent = "🗑️ Delete";
+          delBtn.onclick = async () => {
+            if (!confirm(`Delete "${it.name}"? This cannot be undone.`)) return;
+            _showSpinner();
+            try {
+              await fetch(`/api/saved-exports/${it.id}`, { method: "DELETE" });
+              await loadSavedExports();
+            } catch (e) {
+              console.error(e);
+              alert("Failed to delete saved export.");
+            } finally {
+              _hideSpinner();
+            }
+          };
+
+          // id copy button
+          const idSpan = document.createElement("button");
+          idSpan.className = "text-xs text-gray-400 hover:text-gray-700 px-2";
+          idSpan.textContent = "🔗";
+          idSpan.title = `Copy id ${it.id}`;
+          idSpan.onclick = () => {
+            navigator.clipboard?.writeText(it.id).then(()=>{ idSpan.textContent = "✅"; setTimeout(()=>idSpan.textContent="🔗",800); }).catch(()=>{ alert("Copy failed"); });
+          };
+
+          right.appendChild(dlBtn);
+          right.appendChild(pdfBtn);
+          right.appendChild(delBtn);
+          right.appendChild(idSpan);
+
+          row.appendChild(left);
+          row.appendChild(right);
+
+          listEl.appendChild(row);
+        });
+      }
+
+      // PDF utilities for combined PDF export
+      function buildColumnsFromRows(rows) {
+        const colSet = new Set();
+        rows.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
+        const preferred = ["id","Region","Address","Equipment_No","Unit No","Plan Finish Date","Scheduled Date"];
+        const cols = Array.from(colSet);
+        cols.sort((a,b) => {
+          const ai = preferred.indexOf(a) >= 0 ? preferred.indexOf(a) - 100 : 0;
+          const bi = preferred.indexOf(b) >= 0 ? preferred.indexOf(b) - 100 : 0;
+          if (ai !== bi) return ai - bi;
+          return a.localeCompare(b);
+        });
+        return cols;
+      }
+
+      function rowsToTableArrays(rows, columns) {
+        return rows.map(r => columns.map(c => {
+          const v = r[c];
+          if (v === null || v === undefined) return "";
+          if (typeof v === "object") return JSON.stringify(v);
+          return String(v);
+        }));
+      }
+
+      async function generateAndDownloadPDF(rows, filenamePrefix="saved_exports") {
+        if (!Array.isArray(rows) || rows.length === 0) { alert("No rows to export."); return; }
+        const MAX_ROWS = 1000; // Limit to prevent stack overflow
+        if (rows.length > MAX_ROWS && !confirm(`Export contains ${rows.length} rows. Continue?`)) return;
+
+        const columns = buildColumnsFromRows(rows);
+        const body = rowsToTableArrays(rows, columns);
+
+        try {
+          _showSpinner();
+          const { jsPDF } = window.jspdf || window;
+          const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+          const title = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g,"-")}`;
+          doc.setFontSize(12);
+          doc.text(title, 40, 40);
+
+          doc.autoTable({
+            startY: 60,
+            head: [columns],
+            body: body,
+            styles: { fontSize: 8, cellPadding: 4 },
+            headStyles: { fillColor: [60, 60, 60] },
+            margin: { left: 20, right: 20 },
+            didDrawPage: (data) => {
+              const page = doc.internal.getNumberOfPages();
+              doc.setFontSize(9);
+              doc.text(`Page ${page}`, doc.internal.pageSize.getWidth() - 60, doc.internal.pageSize.getHeight() - 10);
+            }
+          });
+
+          doc.save(`${title}.pdf`);
+        } catch (e) {
+          console.error("PDF generation failed", e);
+          alert("PDF generation failed: " + (e && e.message ? e.message : e));
+        } finally {
+          _hideSpinner();
+        }
+      }
+
+      // Combined PDF download
+      dlPdfBtn.addEventListener("click", async () => {
+        _showSpinner();
+        try {
+          const resp = await fetch("/api/saved-exports");
+          if (!resp.ok) throw new Error("Failed to fetch saved exports");
+          const items = await resp.json();
+          if (!items || items.length === 0) { alert("No saved exports found."); return; }
+
+          const fetches = items.map(it => fetch(`/api/saved-exports/${it.id}`).then(r => { if (!r.ok) throw new Error(); return r.json(); }));
+          const results = await Promise.all(fetches);
+
+          let allRows = [];
+          results.forEach(res => { if (res && res.rows && Array.isArray(res.rows)) allRows = allRows.concat(res.rows); });
+
+          if (allRows.length === 0) { alert("No rows found in saved exports."); return; }
+          await generateAndDownloadPDF(allRows, "combined_saved_exports");
+        } catch (e) {
+          console.error("Failed to create combined PDF:", e);
+          alert("Failed to create combined PDF: " + (e && e.message ? e.message : e));
+        } finally {
+          _hideSpinner();
+        }
+      });
+
+      // Combined CSV download
+      dlCsvBtn.addEventListener("click", () => {
+        window.location.href = "/api/saved-exports/combined/download";
+      });
+
+      // Clear all saved exports
+      clearAllBtn.addEventListener("click", async () => {
+        if (!confirm("Clear ALL saved exports? This cannot be undone.")) return;
+        _showSpinner();
+        try {
+          await fetch("/api/saved-exports/clear", { method: "POST" });
+          await loadSavedExports();
+        } catch (e) {
+          console.error("Failed to clear saved exports", e);
+          alert("Failed to clear saved exports.");
+        } finally {
+          _hideSpinner();
+        }
+      });
+
+      // Close handlers
+      closeBtn.addEventListener("click", closeModal);
+      doneBtn.addEventListener("click", closeModal);
+      backdrop.addEventListener("click", closeModal);
+
+      // Toolbar wiring
+      if (savedExportsBtn) savedExportsBtn.addEventListener("click", openModal);
+      else window.openSavedExportsModal = openModal;
+
+      // Expose generate function to outer scope
+      window.generateAndDownloadPDF = generateAndDownloadPDF;
+    })(); // end modal IIFE
+
+    /* -----------------------
+       File upload handler
+       ----------------------- */
     window.uploadFile = function(){
       const inp  = document.getElementById("fileInput");
-      const file = inp.files[0];
+      const file = inp && inp.files && inp.files[0];
       if (!file) {
         statusDiv.textContent = "❌ Please select a file.";
         statusDiv.className   = "text-red-500";
@@ -476,29 +806,56 @@
         })
         .catch(() => {
           statusDiv.textContent = "❌ Upload failed. Please try again.";
-          statusDiv.className   = "text-red-500";
+          statusDiv.className = "text-red-500";
         })
         .finally(hideSpinner);
     };
 
-    // Bootstrap sequence
+    /* -----------------------
+       Due-count polling
+       ----------------------- */
+    async function refreshDueCount(){
+      try {
+        const resp = await fetch("/due-count");
+        if (!resp.ok) throw new Error();
+        const { count } = await resp.json();
+        countSpan.textContent = count;
+      } catch {
+        console.error("Failed to fetch due-count");
+        statusDiv.textContent = "❌ Failed to fetch task count.";
+        statusDiv.className = "text-red-500";
+      }
+    }
+    refreshDueCount();
+    setInterval(refreshDueCount, 600000);
+
+    /* -----------------------
+       Bootstrap sequence
+       ----------------------- */
     const data = await loadData();
     allColumns = getUniqueColumns(data);
+    await loadListDefinitions();
     buildListButtons();
     initColumnSelect();
     initTabulator(data);
-    
-    window.addEventListener("resize", () => {
-      table.redraw(true);
-    });
+
+    window.addEventListener("resize", () => { if (table) table.redraw(true); });
 
     // Restore last-used list filter (or default to “All”)
-    const saved     = localStorage.getItem("selectedList") || "All";
-    const btnToUse  = document.querySelector(`.filter-btn[data-list="${saved}"]`) ||
-                     document.querySelector(`.filter-btn[data-list="All"]`);
-    applyListFilter(btnToUse.dataset.list, btnToUse);
-  });
+    try {
+      const saved     = localStorage.getItem("selectedList") || "All";
+      const btnToUse  = document.querySelector(`.filter-btn[data-list="${saved}"]`) ||
+                       document.querySelector(`.filter-btn[data-list="All"]`);
+      if (btnToUse) applyListFilter(btnToUse.dataset.list, btnToUse);
+    } catch (e) {
+      // ignore if no list button yet
+    }
+
+    // Safe initial count refresh
+    updateRowCount();
+  }); // end DOMContentLoaded
   </script>
+
 </body>
 </html>
 

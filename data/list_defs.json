@@ -86,7 +86,7 @@
     "Document Link",
     "Work Performed"
   ],
-  "List 1": [
+  "Mailing List": [
     "Region",
     "Unit No",
     "Street & Unit No",
@@ -98,7 +98,7 @@
     "Scheduled Time",
     "2025 - Post Date"
   ],
-  "List 2": [
+  "Runsheet-Audits": [
     "Audit WorkOrder",
     "Perceived sites",
     "Address",
@@ -109,7 +109,7 @@
     "Assigned Person",
     "Community Groups"
   ],
-  "List 3": [
+  "Runsheet-Repairs": [
     "Repair WorkOrder",
     "Percieved Sites",
     "Address",
@@ -119,7 +119,7 @@
     "Assigned Person",
     "Community Groups"
   ],
-  "List 4": [
+  "Invoicing List": [
     "Run Code",
     "Audit WorkOrder",
     "Address",
@@ -129,7 +129,7 @@
     "Invoice Date",
     "Paid Date"
   ],
-  "List 5": [
+  "Quoting": [
     "Quote Number",
     "Equipment_No",
     "Address",
