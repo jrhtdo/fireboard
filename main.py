@@ -9,6 +9,13 @@ import os
 import json
 from pathlib import Path
 from fastapi.responses import FileResponse
+import io
+import json
+from pathlib import Path
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
+import io
 
 app = FastAPI()
 
@@ -345,10 +352,11 @@ def parse_date(date_val):
     except Exception:
         return None
 
-
-
 @app.get("/due-count")
 def get_due_count():
+    # 🔑 Always reload tasks from DB so count is fresh
+    load_all_tasks()
+
     today = datetime.today().date()
     threshold = today + timedelta(days=10)
 
@@ -359,7 +367,6 @@ def get_due_count():
         and today <= parse_date(task["Plan Finish Date"]) <= threshold
     ]
     return {"count": len(due_items)}
-
 
 @app.get("/pending_tasks", response_class=HTMLResponse)
 async def pending_tasks(request: Request):
@@ -474,4 +481,57 @@ def save_lists(payload: dict = Body(...)):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 from io import StringIO
 
+@app.get("/api/saved-exports/combined/pdf")
+def api_download_combined_pdf():
+    try:
+        # Load saved exports
+        if not SAVED_EXPORTS_FILE.exists():
+            return JSONResponse({"error": "No saved exports found"}, status_code=400)
+        with open(SAVED_EXPORTS_FILE, "r", encoding="utf-8") as f:
+            saved_exports = json.load(f)
+        
+        # Combine all rows
+        all_rows = []
+        for exp in saved_exports.values():
+            all_rows.extend(exp.get("rows", []))
+        if not all_rows:
+            return JSONResponse({"error": "No rows in saved exports"}, status_code=400)
 
+        # Build columns (select key columns to fit A4 page)
+        col_set = set()
+        for row in all_rows:
+            col_set.update(row.keys())
+        # Preferred columns for readability
+        preferred = [
+            "id", "Region", "Address", "Equipment_No", "Audit WorkOrder",
+            "Scheduled Date", "Plan Finish Date"
+        ]
+        # Include only columns present in data
+        columns = [col for col in preferred if col in col_set]
+
+        # Convert to table data (header + rows)
+        data = [columns]  # Header row
+        for row in all_rows:
+            data.append([str(row.get(col, "")) for col in columns])  # Convert values to strings
+
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=30, bottomMargin=20)
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        doc.build([table])
+        buffer.seek(0)
+        filename = f"combined_saved_exports_{int(time.time())}.pdf"
+        return StreamingResponse(buffer, media_type="application/pdf",
+                                headers={"Content-Disposition": f"attachment; filename={filename}"})
+    except Exception as e:
+        return JSONResponse({"error": f"Failed to generate PDF: {str(e)}"}, status_code=500)

@@ -377,18 +377,35 @@
         }))
       ];
     }
+    function distributeColumnsEvenly() {
+      if (!table) return;
+      const cols = table.getColumns();
+      if (!cols || cols.length === 0) return;
+
+      const tableWidth = document.getElementById("dynamicTable").offsetWidth;
+      const width = Math.floor(tableWidth / cols.length);
+
+      cols.forEach(col => {
+        col.updateDefinition({ width: width }); // fixed px width
+      });
+
+      table.redraw(true);
+    }
 
     function initTabulator(data){
       table = new Tabulator("#dynamicTable", {
         data: data,
-        layout: "fitColumns",
+        layout: "fitDataStretch",
         pagination: "local",
-        paginationSize: 10,
+        paginationSize: 30,
         columns: makeColumnsDef(),
         dataFiltered: updateRowCount,
         dataSorted:   updateRowCount
       });
       updateRowCount();
+
+      // 👇 Force equal column widths
+      distributeColumnsEvenly();
     }
 
     function applyListFilter(listName, btn){
@@ -419,7 +436,8 @@
       );
       updateRowCount();
     });
-
+    
+    
     /* -----------------------
        Export buttons (table-level)
        ----------------------- */
@@ -603,7 +621,7 @@
           dlBtn.textContent = "⤓ CSV";
           dlBtn.onclick = () => { window.location.href = `/api/saved-exports/${it.id}/download`; };
 
-          // PDF download (client-side)
+          // PDF download (client-side for single exports)
           const pdfBtn = document.createElement("button");
           pdfBtn.className = "bg-purple-600 text-white px-2 py-1 rounded hover:bg-purple-700 text-sm";
           pdfBtn.textContent = "📄 PDF";
@@ -662,7 +680,7 @@
         });
       }
 
-      // PDF utilities for combined PDF export
+      // PDF utility for single exports
       function buildColumnsFromRows(rows) {
         const colSet = new Set();
         rows.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
@@ -686,14 +704,10 @@
         }));
       }
 
-      async function generateAndDownloadPDF(rows, filenamePrefix="saved_exports") {
+      async function generateAndDownloadPDF(rows, filenamePrefix="saved_export") {
         if (!Array.isArray(rows) || rows.length === 0) { alert("No rows to export."); return; }
-        const MAX_ROWS = 1000; // Limit to prevent stack overflow
-        if (rows.length > MAX_ROWS && !confirm(`Export contains ${rows.length} rows. Continue?`)) return;
-
         const columns = buildColumnsFromRows(rows);
         const body = rowsToTableArrays(rows, columns);
-
         try {
           _showSpinner();
           const { jsPDF } = window.jspdf || window;
@@ -701,7 +715,6 @@
           const title = `${filenamePrefix}_${new Date().toISOString().replace(/[:.]/g,"-")}`;
           doc.setFontSize(12);
           doc.text(title, 40, 40);
-
           doc.autoTable({
             startY: 60,
             head: [columns],
@@ -715,7 +728,6 @@
               doc.text(`Page ${page}`, doc.internal.pageSize.getWidth() - 60, doc.internal.pageSize.getHeight() - 10);
             }
           });
-
           doc.save(`${title}.pdf`);
         } catch (e) {
           console.error("PDF generation failed", e);
@@ -725,29 +737,9 @@
         }
       }
 
-      // Combined PDF download
-      dlPdfBtn.addEventListener("click", async () => {
-        _showSpinner();
-        try {
-          const resp = await fetch("/api/saved-exports");
-          if (!resp.ok) throw new Error("Failed to fetch saved exports");
-          const items = await resp.json();
-          if (!items || items.length === 0) { alert("No saved exports found."); return; }
-
-          const fetches = items.map(it => fetch(`/api/saved-exports/${it.id}`).then(r => { if (!r.ok) throw new Error(); return r.json(); }));
-          const results = await Promise.all(fetches);
-
-          let allRows = [];
-          results.forEach(res => { if (res && res.rows && Array.isArray(res.rows)) allRows = allRows.concat(res.rows); });
-
-          if (allRows.length === 0) { alert("No rows found in saved exports."); return; }
-          await generateAndDownloadPDF(allRows, "combined_saved_exports");
-        } catch (e) {
-          console.error("Failed to create combined PDF:", e);
-          alert("Failed to create combined PDF: " + (e && e.message ? e.message : e));
-        } finally {
-          _hideSpinner();
-        }
+      // Combined PDF download (server-side)
+      dlPdfBtn.addEventListener("click", () => {
+        window.location.href = "/api/saved-exports/combined/pdf";
       });
 
       // Combined CSV download
@@ -779,9 +771,9 @@
       if (savedExportsBtn) savedExportsBtn.addEventListener("click", openModal);
       else window.openSavedExportsModal = openModal;
 
-      // Expose generate function to outer scope
+      // Expose generate function for single exports
       window.generateAndDownloadPDF = generateAndDownloadPDF;
-    })(); // end modal IIFE
+    })();
 
     /* -----------------------
        File upload handler
@@ -814,20 +806,73 @@
     /* -----------------------
        Due-count polling
        ----------------------- */
-    async function refreshDueCount(){
+    // ---------- refresh / due-count helper (single source of truth) ----------
+    let _dueCountInFlight = null; // holds AbortController for in-flight request (optional)
+
+    async function refreshDueCount() {
+      // cancel a previous in-flight request
+      try { if (_dueCountInFlight) _dueCountInFlight.abort(); } catch(e){}
+
+      // create new abort controller for this call (optional)
+      const ac = new AbortController();
+      _dueCountInFlight = ac;
+
+      // show spinner if available
+      if (typeof showSpinner === "function") showSpinner();
+
       try {
-        const resp = await fetch("/due-count");
-        if (!resp.ok) throw new Error();
-        const { count } = await resp.json();
-        countSpan.textContent = count;
-      } catch {
-        console.error("Failed to fetch due-count");
-        statusDiv.textContent = "❌ Failed to fetch task count.";
-        statusDiv.className = "text-red-500";
+        const resp = await fetch("/due-count", { signal: ac.signal });
+        if (!resp.ok) {
+          // if backend returns 4xx/5xx, treat as no-data but surface error
+          console.error("due-count response not OK:", resp.status);
+          document.getElementById("dueCount").textContent = "0";
+          return;
+        }
+        const payload = await resp.json();
+        // prefer numeric display; fallback to 0
+        const count = (payload && typeof payload.count === "number") ? payload.count : (parseInt(payload?.count) || 0);
+        document.getElementById("dueCount").textContent = String(count);
+      } catch (err) {
+        if (err.name === "AbortError") {
+          // aborted intentionally — ignore
+          return;
+        }
+        console.error("Failed to fetch due-count:", err);
+        // set visible fallback and a short console-friendly message
+        document.getElementById("dueCount").textContent = "0";
+        // optionally show a small error in uploadStatus area (non-blocking)
+        try { statusDiv.textContent = "❌ Failed to fetch task count."; statusDiv.className = "text-red-500"; } catch(e){}
+      } finally {
+        _dueCountInFlight = null;
+        if (typeof hideSpinner === "function") hideSpinner();
       }
     }
-    refreshDueCount();
-    setInterval(refreshDueCount, 600000);
+
+    // Hook the button and the interval (call once immediately)
+    // Replace the old binding that called refreshDueCount
+    const refreshBtn = document.getElementById("refreshCountBtn");
+    if (refreshBtn) {
+      // remove any existing listeners by replacing the node (safe)
+      const newBtn = refreshBtn.cloneNode(true);
+      refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+
+      // When clicked, update the table counts (no network)
+      newBtn.addEventListener("click", () => {
+        updateRowCount(); // updates the "rowCountDisplay"
+
+        // brief visual feedback: flash the rowCountDisplay
+        const display = document.getElementById("rowCountDisplay");
+        if (display) {
+          display.style.transition = "background-color 0.3s";
+          display.style.backgroundColor = "#eefaf0"; // pale green flash
+          setTimeout(() => { display.style.backgroundColor = ""; }, 500);
+        }
+      });
+    }
+
+
+    
+
 
     /* -----------------------
        Bootstrap sequence
